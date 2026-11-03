@@ -1,5 +1,8 @@
 .vscode/**
 src/**
+node_modules/**
 tsconfig.json
 SPEC.md
+package-lock.json
 **/*.map
+.gitignore

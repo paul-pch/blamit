@@ -1,83 +1,132 @@
 {
-  "name": "simple-blame",
-  "displayName": "Simple Blame",
-  "description": "Blame de la ligne courante et ouverture du commit ou de la MR/PR dans le navigateur.",
+  "name": "blamit",
+  "displayName": "%displayName%",
+  "description": "%description%",
   "version": "0.1.0",
   "publisher": "paul-pch",
   "license": "MIT",
+  "icon": "images/icon.png",
+  "keywords": [
+    "git",
+    "blame",
+    "gitlab",
+    "github",
+    "gitea",
+    "merge request",
+    "pull request"
+  ],
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
     "SCM Providers"
   ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "%capabilities.untrusted%"
+    },
+    "virtualWorkspaces": false
+  },
   "activationEvents": [
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
+  "l10n": "./l10n",
   "contributes": {
     "commands": [
       {
-        "command": "simpleBlame.openCommit",
-        "title": "Ouvrir le commit",
-        "category": "Simple Blame"
+        "command": "blamit.openCommit",
+        "title": "%command.openCommit%",
+        "category": "Blamit"
       },
       {
-        "command": "simpleBlame.openMergeRequest",
-        "title": "Ouvrir la MR/PR",
-        "category": "Simple Blame"
+        "command": "blamit.openMergeRequest",
+        "title": "%command.openMergeRequest%",
+        "category": "Blamit"
       },
       {
-        "command": "simpleBlame.copySha",
-        "title": "Copier le SHA",
-        "category": "Simple Blame"
+        "command": "blamit.copySha",
+        "title": "%command.copySha%",
+        "category": "Blamit"
       },
       {
-        "command": "simpleBlame.setToken",
-        "title": "Définir un token API",
-        "category": "Simple Blame"
+        "command": "blamit.setToken",
+        "title": "%command.setToken%",
+        "category": "Blamit"
       }
     ],
     "menus": {
       "editor/context": [
         {
-          "command": "simpleBlame.openCommit",
+          "command": "blamit.openCommit",
           "when": "resourceScheme == file",
-          "group": "simpleBlame@1"
+          "group": "blamit@1"
         },
         {
-          "command": "simpleBlame.openMergeRequest",
+          "command": "blamit.openMergeRequest",
           "when": "resourceScheme == file",
-          "group": "simpleBlame@2"
+          "group": "blamit@2"
         },
         {
-          "command": "simpleBlame.copySha",
+          "command": "blamit.copySha",
           "when": "resourceScheme == file",
-          "group": "simpleBlame@3"
+          "group": "blamit@3"
         }
       ]
     },
     "configuration": {
-      "title": "Simple Blame",
+      "title": "Blamit",
       "properties": {
-        "simpleBlame.enabled": {
+        "blamit.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Affiche l'auteur de la ligne courante."
+          "description": "%config.enabled%"
         },
-        "simpleBlame.remote": {
+        "blamit.remote": {
           "type": "string",
           "default": "origin",
-          "description": "Remote git utilisé pour construire les URLs."
+          "description": "%config.remote%"
         },
-        "simpleBlame.hosts": {
+        "blamit.hosts": {
           "type": "object",
           "default": {},
           "additionalProperties": {
-            "type": "string",
-            "enum": ["github", "gitlab", "gitea"]
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "github",
+                  "gitlab",
+                  "gitea"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "github",
+                      "gitlab",
+                      "gitea"
+                    ]
+                  },
+                  "url": {
+                    "type": "string",
+                    "pattern": "^https?://"
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              }
+            ]
           },
-          "description": "Type d'hébergeur par hôte, pour les instances self-hosted. Ex : { \"git.maboite.fr\": \"gitea\" }"
+          "markdownDescription": "%config.hosts%"
         }
       }
     }
@@ -85,11 +134,15 @@
   "scripts": {
     "compile": "tsc -p .",
     "watch": "tsc -watch -p .",
-    "package": "vsce package"
+    "vscode:prepublish": "npm run compile",
+    "package": "vsce package",
+    "publish": "ovsx publish"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "1.85.0",
+    "@vscode/vsce": "^4.1.0",
+    "ovsx": "^0.10.0",
     "typescript": "^5.4.0"
   }
 }

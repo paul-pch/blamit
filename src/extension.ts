@@ -1,7 +1,8 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { BlameLine, blame, commitMessage, findMergeCommit, remoteUrl } from './git';
+import { BlameLine, blame, commitMessage, findMergeCommit, remoteUrl, setGitPath } from './git';
 import {
+  HostOverride,
   Remote,
   commitUrl,
   fetchMergeRequestNumber,
@@ -11,7 +12,14 @@ import {
   parseRemote,
 } from './hosts';
 
-const blameCache = new Map<string, Promise<BlameLine[] | undefined>>();
+interface BlameEntry {
+  lines: Promise<BlameLine[] | undefined>;
+  abort: AbortController;
+  /** Fichier hors dépôt ou non suivi : inutile de relancer git à chaque frappe. */
+  failed: boolean;
+}
+
+const blameCache = new Map<string, BlameEntry>();
 const messageCache = new Map<string, Promise<string>>();
 /** SHA -> numéro de MR/PR, ou null si aucune trouvée. */
 const mergeRequestCache = new Map<string, number | null>();
@@ -30,36 +38,44 @@ let log: vscode.LogOutputChannel;
 let timer: NodeJS.Timeout | undefined;
 let lastEditor: vscode.TextEditor | undefined;
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
   secrets = context.secrets;
-  log = vscode.window.createOutputChannel('Simple Blame', { log: true });
-  log.info('Extension activée');
+  log = vscode.window.createOutputChannel('Blamit', { log: true });
+  context.subscriptions.push(log, decoration);
+  await resolveGitPath();
 
   context.subscriptions.push(
-    log,
-    decoration,
     vscode.window.onDidChangeTextEditorSelection((e) => scheduleUpdate(e.textEditor)),
-    vscode.window.onDidChangeActiveTextEditor((e) => scheduleUpdate(e)),
+    vscode.window.onDidChangeActiveTextEditor((e) => {
+      // Le fichier a pu être ajouté au dépôt entre-temps.
+      if (e && blameCache.get(e.document.uri.toString())?.failed) {
+        invalidate(e.document);
+      }
+      scheduleUpdate(e);
+    }),
     vscode.workspace.onDidChangeTextDocument((e) => {
       // Ignore les panneaux Output & co, qui changent en permanence et bloqueraient le debounce.
       if (e.document.uri.scheme !== 'file' || e.contentChanges.length === 0) {
         return;
       }
-      blameCache.delete(e.document.uri.toString());
+      if (!blameCache.get(e.document.uri.toString())?.failed) {
+        invalidate(e.document);
+      }
       scheduleUpdate(vscode.window.activeTextEditor);
     }),
-    vscode.workspace.onDidSaveTextDocument((d) => blameCache.delete(d.uri.toString())),
-    vscode.workspace.onDidCloseTextDocument((d) => blameCache.delete(d.uri.toString())),
+    vscode.workspace.onDidSaveTextDocument(invalidate),
+    vscode.workspace.onDidCloseTextDocument(invalidate),
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration('simpleBlame')) {
+      if (e.affectsConfiguration('blamit')) {
+        mergeRequestCache.clear();
         scheduleUpdate(vscode.window.activeTextEditor);
       }
     }),
     vscode.languages.registerHoverProvider({ scheme: 'file' }, { provideHover }),
-    vscode.commands.registerCommand('simpleBlame.openCommit', openCommit),
-    vscode.commands.registerCommand('simpleBlame.openMergeRequest', openMergeRequest),
-    vscode.commands.registerCommand('simpleBlame.copySha', copySha),
-    vscode.commands.registerCommand('simpleBlame.setToken', setToken),
+    vscode.commands.registerCommand('blamit.openCommit', openCommit),
+    vscode.commands.registerCommand('blamit.openMergeRequest', openMergeRequest),
+    vscode.commands.registerCommand('blamit.copySha', copySha),
+    vscode.commands.registerCommand('blamit.setToken', setToken),
   );
 
   scheduleUpdate(vscode.window.activeTextEditor);
@@ -67,6 +83,28 @@ export function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() {
   clearTimeout(timer);
+  for (const entry of blameCache.values()) {
+    entry.abort.abort();
+  }
+}
+
+async function resolveGitPath() {
+  try {
+    const ext = vscode.extensions.getExtension('vscode.git');
+    const api = (await ext?.activate())?.getAPI(1);
+    if (api?.git.path) {
+      setGitPath(api.git.path);
+      log.info(`Using git at ${api.git.path}`);
+      return;
+    }
+  } catch (err) {
+    log.debug(`Git extension unavailable: ${(err as Error).message}`);
+  }
+  log.warn('Git extension unavailable, falling back to "git" from PATH');
+}
+
+function isEnabled(): boolean {
+  return vscode.workspace.getConfiguration('blamit').get<boolean>('enabled', true);
 }
 
 // --- Annotation ---------------------------------------------------------------
@@ -76,7 +114,9 @@ function scheduleUpdate(editor: vscode.TextEditor | undefined) {
     return;
   }
   clearTimeout(timer);
-  timer = setTimeout(() => updateDecoration(editor), 150);
+  timer = setTimeout(() => {
+    updateDecoration(editor).catch((err: Error) => log.error(err));
+  }, 150);
 }
 
 async function updateDecoration(editor: vscode.TextEditor | undefined) {
@@ -87,26 +127,31 @@ async function updateDecoration(editor: vscode.TextEditor | undefined) {
   if (!editor) {
     return;
   }
-  const enabled = vscode.workspace.getConfiguration('simpleBlame').get<boolean>('enabled', true);
   const line = editor.selection.active.line;
-  const info = enabled ? await blameAt(editor.document, line) : undefined;
+  const info = isEnabled() ? await blameAt(editor.document, line) : undefined;
 
   // Le curseur a pu bouger pendant le blame.
   if (editor !== vscode.window.activeTextEditor || editor.selection.active.line !== line) {
     return;
   }
-  log.trace(`Ligne ${line + 1} de ${editor.document.uri.fsPath} : ${info ? info.sha : 'pas de blame'}`);
+  log.trace(`Line ${line + 1} of ${editor.document.uri.fsPath}: ${info ? info.sha : 'no blame'}`);
   if (!info) {
     editor.setDecorations(decoration, []);
     return;
   }
   const text = info.committed
     ? `${info.author}, ${relativeTime(info.authorTime)} • ${info.summary}`
-    : 'Vous • Non commité';
+    : vscode.l10n.t('You • Not committed yet');
   const end = editor.document.lineAt(line).range.end;
   editor.setDecorations(decoration, [
     { range: new vscode.Range(end, end), renderOptions: { after: { contentText: text } } },
   ]);
+}
+
+function invalidate(doc: vscode.TextDocument) {
+  const key = doc.uri.toString();
+  blameCache.get(key)?.abort.abort();
+  blameCache.delete(key);
 }
 
 async function blameAt(doc: vscode.TextDocument, line: number): Promise<BlameLine | undefined> {
@@ -114,20 +159,38 @@ async function blameAt(doc: vscode.TextDocument, line: number): Promise<BlameLin
     return undefined;
   }
   const key = doc.uri.toString();
-  let lines = blameCache.get(key);
-  if (!lines) {
+  let entry = blameCache.get(key);
+  if (!entry) {
     const file = doc.uri.fsPath;
-    lines = blame(path.dirname(file), path.basename(file), doc.getText()).catch((err: Error) => {
-      // Cas normal pour un fichier hors dépôt ou non suivi : on log sans alerter.
-      log.warn(`git blame a échoué pour ${file} : ${err.message.trim()}`);
-      return undefined;
-    });
-    blameCache.set(key, lines);
+    const abort = new AbortController();
+    const created: BlameEntry = { abort, failed: false, lines: Promise.resolve(undefined) };
+    created.lines = blame(path.dirname(file), path.basename(file), doc.getText(), abort.signal).catch(
+      (err: Error) => {
+        if (!abort.signal.aborted) {
+          // Cas normal pour un fichier hors dépôt ou non suivi.
+          created.failed = true;
+          log.debug(`git blame failed for ${file}: ${err.message.trim()}`);
+        }
+        return undefined;
+      },
+    );
+    entry = created;
+    blameCache.set(key, entry);
   }
-  return (await lines)?.[line];
+  return (await entry.lines)?.[line];
 }
 
-const relativeFormat = new Intl.RelativeTimeFormat('fr', { numeric: 'auto' });
+function relativeTime(time: number): string {
+  const seconds = (time - Date.now()) / 1000;
+  const format = new Intl.RelativeTimeFormat(vscode.env.language, { numeric: 'auto' });
+  for (const [unit, size] of units) {
+    if (Math.abs(seconds) >= size) {
+      return format.format(Math.round(seconds / size), unit);
+    }
+  }
+  return vscode.l10n.t('just now');
+}
+
 const units: [Intl.RelativeTimeFormatUnit, number][] = [
   ['year', 365 * 24 * 3600],
   ['month', 30 * 24 * 3600],
@@ -137,21 +200,15 @@ const units: [Intl.RelativeTimeFormatUnit, number][] = [
   ['minute', 60],
 ];
 
-function relativeTime(time: number): string {
-  const seconds = (time - Date.now()) / 1000;
-  for (const [unit, size] of units) {
-    if (Math.abs(seconds) >= size) {
-      return relativeFormat.format(Math.round(seconds / size), unit);
-    }
-  }
-  return "à l'instant";
-}
-
 // --- Hover --------------------------------------------------------------------
 
 async function provideHover(doc: vscode.TextDocument, position: vscode.Position) {
   const editor = vscode.window.activeTextEditor;
-  if (editor?.document !== doc || editor.selection.active.line !== position.line) {
+  if (!isEnabled() || editor?.document !== doc || editor.selection.active.line !== position.line) {
+    return undefined;
+  }
+  // Uniquement au survol de l'annotation, pour ne pas polluer les hovers du langage.
+  if (position.character < doc.lineAt(position.line).range.end.character) {
     return undefined;
   }
   const info = await blameAt(doc, position.line);
@@ -162,22 +219,23 @@ async function provideHover(doc: vscode.TextDocument, position: vscode.Position)
   const [message, remote] = await Promise.all([cachedMessage(cwd, info.sha), getRemote(cwd)]);
 
   const md = new vscode.MarkdownString();
-  md.isTrusted = { enabledCommands: ['simpleBlame.openMergeRequest', 'simpleBlame.copySha'] };
+  md.isTrusted = { enabledCommands: ['blamit.openMergeRequest', 'blamit.copySha'] };
   md.appendMarkdown(`**${escape(info.author)}** &lt;${escape(info.authorMail)}&gt; — `);
-  md.appendMarkdown(`${new Date(info.authorTime).toLocaleString('fr-FR')} — \`${info.sha.slice(0, 8)}\`\n\n`);
+  md.appendMarkdown(`${new Date(info.authorTime).toLocaleString(vscode.env.language)} — \`${info.sha.slice(0, 8)}\`\n\n`);
   md.appendCodeblock(message, 'text');
 
   const links = [];
   if (remote) {
-    links.push(`[Ouvrir le commit](${commitUrl(remote, info.sha)})`);
+    links.push(`[${vscode.l10n.t('Open commit')}](${commitUrl(remote, info.sha)})`);
     const mr = mergeRequestCache.get(info.sha);
     if (typeof mr === 'number') {
-      links.push(`[Ouvrir la MR/PR ${mergeRequestLabel(remote, mr)}](${mergeRequestUrl(remote, mr)})`);
+      const label = vscode.l10n.t('Open MR/PR {0}', mergeRequestLabel(remote, mr));
+      links.push(`[${label}](${mergeRequestUrl(remote, mr)})`);
     } else if (mr === undefined) {
-      links.push('[Chercher la MR/PR](command:simpleBlame.openMergeRequest)');
+      links.push(`[${vscode.l10n.t('Find MR/PR')}](command:blamit.openMergeRequest)`);
     }
   }
-  links.push('[Copier le SHA](command:simpleBlame.copySha)');
+  links.push(`[${vscode.l10n.t('Copy SHA')}](command:blamit.copySha)`);
   md.appendMarkdown(links.join(' | '));
   return new vscode.Hover(md);
 }
@@ -210,11 +268,11 @@ async function currentLine(): Promise<LineContext | undefined> {
   }
   const info = await blameAt(editor.document, editor.selection.active.line);
   if (!info) {
-    vscode.window.showWarningMessage('Simple Blame : pas de blame disponible pour cette ligne.');
+    vscode.window.showWarningMessage(vscode.l10n.t('Blamit: no blame available for this line.'));
     return undefined;
   }
   if (!info.committed) {
-    vscode.window.showInformationMessage('Simple Blame : cette ligne n\'est pas encore commitée.');
+    vscode.window.showInformationMessage(vscode.l10n.t('Blamit: this line is not committed yet.'));
     return undefined;
   }
   const cwd = path.dirname(editor.document.uri.fsPath);
@@ -222,18 +280,18 @@ async function currentLine(): Promise<LineContext | undefined> {
 }
 
 async function getRemote(cwd: string): Promise<Remote | undefined> {
-  const config = vscode.workspace.getConfiguration('simpleBlame');
+  const config = vscode.workspace.getConfiguration('blamit');
   const url = await remoteUrl(cwd, config.get<string>('remote', 'origin')).catch(() => undefined);
-  const remote = url ? parseRemote(url, config.get<Record<string, string>>('hosts', {})) : undefined;
+  const remote = url ? parseRemote(url, config.get<Record<string, HostOverride>>('hosts', {})) : undefined;
   if (url && !remote) {
-    log.warn(`Hébergeur non reconnu pour ${url} : à déclarer dans le réglage simpleBlame.hosts`);
+    log.warn(`Unrecognized host for ${url}: declare it in the blamit.hosts setting`);
   }
   return remote;
 }
 
 function warnNoRemote() {
   vscode.window.showWarningMessage(
-    'Simple Blame : remote introuvable ou hébergeur non reconnu (voir le réglage simpleBlame.hosts).',
+    vscode.l10n.t('Blamit: remote not found or host not recognized (see the blamit.hosts setting).'),
   );
 }
 
@@ -260,23 +318,24 @@ async function openMergeRequest() {
   let mr: number | undefined;
   try {
     mr = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Window, title: 'Recherche de la MR/PR…' },
+      { location: vscode.ProgressLocation.Window, title: vscode.l10n.t('Looking up the MR/PR…') },
       () => findMergeRequest(cwd, remote, info.sha),
     );
   } catch (err) {
     log.error(err as Error);
-    vscode.window.showErrorMessage(`Simple Blame : échec de l'appel API — ${(err as Error).message}`);
+    vscode.window.showErrorMessage(vscode.l10n.t('Blamit: API call failed — {0}', (err as Error).message));
     return;
   }
   if (mr !== undefined) {
     vscode.env.openExternal(vscode.Uri.parse(mergeRequestUrl(remote, mr)));
     return;
   }
+  const openInstead = vscode.l10n.t('Open the commit instead');
   const choice = await vscode.window.showInformationMessage(
-    'Simple Blame : aucune MR/PR trouvée pour ce commit.',
-    'Ouvrir le commit à la place',
+    vscode.l10n.t('Blamit: no MR/PR found for this commit.'),
+    openInstead,
   );
-  if (choice) {
+  if (choice === openInstead) {
     vscode.env.openExternal(vscode.Uri.parse(commitUrl(remote, info.sha)));
   }
 }
@@ -312,7 +371,7 @@ async function copySha() {
   const ctx = await currentLine();
   if (ctx) {
     await vscode.env.clipboard.writeText(ctx.info.sha);
-    vscode.window.setStatusBarMessage(`SHA copié : ${ctx.info.sha.slice(0, 8)}`, 3000);
+    vscode.window.setStatusBarMessage(vscode.l10n.t('SHA copied: {0}', ctx.info.sha.slice(0, 8)), 3000);
   }
 }
 
@@ -326,14 +385,14 @@ async function setToken() {
     ? await getRemote(path.dirname(editor.document.uri.fsPath))
     : undefined;
   const host = await vscode.window.showInputBox({
-    prompt: 'Hôte (ex : gitlab.com, github.com, git.maboite.fr)',
+    prompt: vscode.l10n.t('Host (e.g. gitlab.com, github.com, git.example.com)'),
     value: remote?.host ?? '',
   });
   if (!host) {
     return;
   }
   const token = await vscode.window.showInputBox({
-    prompt: `Token API pour ${host} (laisser vide pour supprimer)`,
+    prompt: vscode.l10n.t('API token for {0} (leave empty to remove)', host),
     password: true,
     ignoreFocusOut: true,
   });
@@ -342,10 +401,10 @@ async function setToken() {
   }
   if (token) {
     await secrets.store(tokenKey(host), token);
-    vscode.window.showInformationMessage(`Simple Blame : token enregistré pour ${host}.`);
+    vscode.window.showInformationMessage(vscode.l10n.t('Blamit: token saved for {0}.', host));
   } else {
     await secrets.delete(tokenKey(host));
-    vscode.window.showInformationMessage(`Simple Blame : token supprimé pour ${host}.`);
+    vscode.window.showInformationMessage(vscode.l10n.t('Blamit: token removed for {0}.', host));
   }
   // Les recherches infructueuses peuvent maintenant aboutir via l'API.
   for (const [sha, mr] of mergeRequestCache) {

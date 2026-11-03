@@ -1,4 +1,4 @@
-# Simple Blame — Spécification
+# Blamit — Spécification
 
 Extension VS Code minimaliste inspirée de GitLens : afficher l'auteur de la ligne courante et ouvrir dans le navigateur le commit ou la MR/PR qui a introduit la ligne.
 
@@ -17,20 +17,20 @@ Extension VS Code minimaliste inspirée de GitLens : afficher l'auteur de la lig
 - Mise à jour avec un debounce d'environ 150 ms sur les changements de sélection.
 
 ### 1.2 Hover
-Au survol de l'annotation (ou de la ligne), une infobulle Markdown affiche :
+Au survol de l'annotation (fin de ligne uniquement, pour ne pas se mêler aux hovers du langage), une infobulle Markdown affiche :
 - l'auteur, l'email, la date absolue, le SHA court ;
 - le message complet du commit ;
 - les liens **Ouvrir le commit** et **Ouvrir la MR/PR**. Le lien MR/PR n'apparaît que si elle a déjà été trouvée. Sinon, le lien « Chercher la MR/PR » lance la commande correspondante.
 
 ### 1.3 Commandes
-Dans la palette et dans le menu contextuel de l'éditeur (groupe `simpleBlame`), elles s'appliquent toutes à la ligne du curseur :
+Dans la palette et dans le menu contextuel de l'éditeur (groupe `blamit`), elles s'appliquent toutes à la ligne du curseur :
 
 | Commande | ID |
 |---|---|
-| Simple Blame: Ouvrir le commit | `simpleBlame.openCommit` |
-| Simple Blame: Ouvrir la MR/PR | `simpleBlame.openMergeRequest` |
-| Simple Blame: Copier le SHA | `simpleBlame.copySha` |
-| Simple Blame: Définir un token API | `simpleBlame.setToken` (palette seulement) |
+| Blamit: Ouvrir le commit | `blamit.openCommit` |
+| Blamit: Ouvrir la MR/PR | `blamit.openMergeRequest` |
+| Blamit: Copier le SHA | `blamit.copySha` |
+| Blamit: Définir un token API | `blamit.setToken` (palette seulement) |
 
 Si aucune MR/PR n'est trouvée, un message d'information le dit et propose « Ouvrir le commit à la place ».
 
@@ -42,7 +42,8 @@ Le type d'hébergeur est déduit de l'URL du remote (`origin` par défaut, sinon
 - l'hôte contient `github` → GitHub ;
 - l'hôte contient `gitlab` → GitLab ;
 - l'hôte contient `gitea` ou `forgejo` → Gitea ;
-- sinon, on consulte le réglage `simpleBlame.hosts`, par exemple `{ "git.maboite.fr": "gitea" }`.
+- le réglage `blamit.hosts` est prioritaire : `{ "git.maboite.fr": "gitea" }`, ou `{ "github-perso": { "type": "github", "url": "https://github.com" } }` pour un alias SSH ou une instance servie sous un sous-chemin.
+- Les remotes `http://` gardent leur protocole ; les remotes SSH donnent du `https://`.
 
 Les remotes SSH (`git@host:group/proj.git`, `ssh://git@host:2222/group/proj.git`) et HTTPS sont normalisés en `https://host/group/proj`. Les sous-groupes GitLab sont gérés.
 
@@ -83,7 +84,7 @@ On retient la première MR/PR fusionnée, sinon la première de la liste. Les ap
 
 ### 3.3 Tokens
 - Ils sont stockés dans le `SecretStorage` de VS Code, avec une clé par hôte.
-- La commande `simpleBlame.setToken` demande l'hôte (pré-rempli avec celui du dépôt courant) puis le token. Une valeur vide supprime le token.
+- La commande `blamit.setToken` demande l'hôte (pré-rempli avec celui du dépôt courant) puis le token. Une valeur vide supprime le token.
 
 ### 3.4 Cache
 Résultat par SHA (MR trouvée ou « aucune »), conservé en mémoire pendant la session.
@@ -99,7 +100,13 @@ Résultat par SHA (MR trouvée ou « aucune »), conservé en mémoire pendant l
   - Le cache est invalidé à la modification du document, avec un debounce, et à la sauvegarde.
   - Seul le blame du fichier est calculé ; l'annotation lit directement la ligne voulue.
 - Affichage : un seul `TextEditorDecorationType` avec `after` (couleur `editorCodeLens.foreground`, italique).
-- Hover : un `HoverProvider` qui ne répond que pour la ligne du curseur.
+- Hover : un `HoverProvider` qui ne répond que pour la ligne du curseur, en fin de ligne.
+- git : l'exécutable résolu par l'extension Git de VS Code (évite un `git.exe` piégé dans le dépôt sous Windows).
+- Sécurité : désactivée dans les espaces de travail non approuvés (git peut exécuter du code configuré par le dépôt).
+- Un blame en cours est annulé dès que le document change ; un fichier hors dépôt n'est pas re-blamé à chaque frappe.
+- Appels API : timeout de 10 s.
+- Internationalisation : anglais par défaut, français, allemand, italien, espagnol (`package.nls.*.json` et `l10n/`).
+- Logs : panneau Output « Blamit ».
 
 ### Arborescence prévue
 ```
@@ -114,9 +121,9 @@ src/
 ### Réglages
 | Réglage | Défaut | Rôle |
 |---|---|---|
-| `simpleBlame.enabled` | `true` | Active ou désactive l'annotation |
-| `simpleBlame.remote` | `"origin"` | Remote à utiliser |
-| `simpleBlame.hosts` | `{}` | Associe un hôte à un type (`github` / `gitlab` / `gitea`) |
+| `blamit.enabled` | `true` | Active ou désactive l'annotation |
+| `blamit.remote` | `"origin"` | Remote à utiliser |
+| `blamit.hosts` | `{}` | Associe un hôte à un type (`github` / `gitlab` / `gitea`), ou à `{ type, url }` |
 
 ---
 

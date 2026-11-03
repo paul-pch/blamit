@@ -1,0 +1,12 @@
+{
+  "displayName": "Blamit",
+  "description": "Blame della riga corrente e apertura nel browser del commit o della MR/PR che l'ha introdotta (GitHub, GitLab, Gitea).",
+  "capabilities.untrusted": "Blamit esegue git, che può eseguire codice configurato dal repository. L'estensione è disattivata nelle aree di lavoro non attendibili.",
+  "command.openCommit": "Apri il commit",
+  "command.openMergeRequest": "Apri la MR/PR",
+  "command.copySha": "Copia lo SHA",
+  "command.setToken": "Imposta un token API",
+  "config.enabled": "Mostra l'autore della riga corrente.",
+  "config.remote": "Remote git usato per costruire gli URL.",
+  "config.hosts": "Tipo di host per le istanze self-hosted, indicizzato per host dell'URL del remote. Il valore è un tipo (`github`, `gitlab`, `gitea`) oppure `{ \"type\": ..., \"url\": \"https://...\" }` per indicare anche l'URL web (utile per gli alias SSH).\n\nEsempio: `{ \"git.example.com\": \"gitea\", \"github-work\": { \"type\": \"github\", \"url\": \"https://github.com\" } }`"
+}

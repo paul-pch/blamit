@@ -1,0 +1,12 @@
+{
+  "displayName": "Blamit",
+  "description": "Blame der aktuellen Zeile und Öffnen des Commits oder Merge/Pull Requests, der sie eingeführt hat, im Browser (GitHub, GitLab, Gitea).",
+  "capabilities.untrusted": "Blamit führt git aus, das vom Repository konfigurierten Code ausführen kann. In nicht vertrauenswürdigen Arbeitsbereichen ist die Erweiterung deaktiviert.",
+  "command.openCommit": "Commit öffnen",
+  "command.openMergeRequest": "MR/PR öffnen",
+  "command.copySha": "SHA kopieren",
+  "command.setToken": "API-Token festlegen",
+  "config.enabled": "Zeigt den Autor der aktuellen Zeile an.",
+  "config.remote": "Git-Remote, das zum Erstellen der URLs verwendet wird.",
+  "config.hosts": "Host-Typ für selbst gehostete Instanzen, nach Host der Remote-URL. Der Wert ist entweder ein Typ (`github`, `gitlab`, `gitea`) oder `{ \"type\": ..., \"url\": \"https://...\" }`, um zusätzlich die Web-URL anzugeben (nützlich für SSH-Aliase).\n\nBeispiel: `{ \"git.example.com\": \"gitea\", \"github-work\": { \"type\": \"github\", \"url\": \"https://github.com\" } }`"
+}

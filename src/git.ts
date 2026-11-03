@@ -10,9 +10,19 @@ export interface BlameLine {
   committed: boolean;
 }
 
-export function git(cwd: string, args: string[], input?: string): Promise<string> {
+/**
+ * Chemin de l'exécutable git. On reprend celui résolu par l'extension Git de VS Code :
+ * sous Windows, un simple 'git' pourrait exécuter un git.exe placé dans le dépôt.
+ */
+let gitPath = 'git';
+
+export function setGitPath(p: string) {
+  gitPath = p;
+}
+
+export function git(cwd: string, args: string[], input?: string, signal?: AbortSignal): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = execFile('git', args, { cwd, maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
+    const child = execFile(gitPath, args, { cwd, signal, maxBuffer: 64 * 1024 * 1024 }, (err, stdout) => {
       if (err) {
         reject(err);
       } else {
@@ -26,8 +36,8 @@ export function git(cwd: string, args: string[], input?: string): Promise<string
 }
 
 /** Blame du fichier, avec le contenu du buffer (éventuellement non sauvegardé). Index = numéro de ligne (0-based). */
-export async function blame(cwd: string, file: string, contents: string): Promise<BlameLine[]> {
-  const out = await git(cwd, ['blame', '--porcelain', '--contents', '-', '--', file], contents);
+export async function blame(cwd: string, file: string, contents: string, signal?: AbortSignal): Promise<BlameLine[]> {
+  const out = await git(cwd, ['blame', '--porcelain', '--contents', '-', '--', file], contents, signal);
   const commits = new Map<string, BlameLine>();
   const lines: BlameLine[] = [];
   let current: BlameLine | undefined;

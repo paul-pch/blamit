@@ -2,16 +2,24 @@ export type HostKind = 'github' | 'gitlab' | 'gitea';
 
 export interface Remote {
   kind: HostKind;
-  /** Hôte web, ex : gitlab.com ou git.maboite.fr:3000 */
+  /** URL web de l'instance, sans slash final, ex : https://gitlab.com ou http://git.maboite.fr:3000 */
+  baseUrl: string;
+  /** Hôte web (avec port éventuel), sert de clé pour les tokens. */
   host: string;
   /** Chemin du projet, ex : group/sub/proj */
   path: string;
 }
 
-/** Normalise une URL de remote (SSH ou HTTPS). Retourne undefined si l'hébergeur n'est pas reconnu. */
-export function parseRemote(url: string, overrides: Record<string, string>): Remote | undefined {
+/** Valeur du réglage blamit.hosts : un type, ou un type et l'URL web (pour les alias SSH). */
+export type HostOverride = HostKind | { type: HostKind; url?: string };
+
+const kinds: readonly string[] = ['github', 'gitlab', 'gitea'];
+
+/** Normalise une URL de remote (SSH ou HTTP(S)). Retourne undefined si l'hébergeur n'est pas reconnu. */
+export function parseRemote(url: string, overrides: Record<string, HostOverride>): Remote | undefined {
   let host: string;
   let path: string;
+  let protocol = 'https:';
   const scp = /^(?:[^@/]+@)?([^:/]+):(?!\/)(.+)$/.exec(url);
   if (scp) {
     host = scp[1];
@@ -19,20 +27,34 @@ export function parseRemote(url: string, overrides: Record<string, string>): Rem
   } else {
     try {
       const u = new URL(url);
-      // Le port SSH n'a rien à voir avec le port web.
-      host = u.protocol.startsWith('http') ? u.host : u.hostname;
+      if (u.protocol === 'http:' || u.protocol === 'https:') {
+        protocol = u.protocol;
+        host = u.host;
+      } else {
+        // Le port SSH n'a rien à voir avec le port web.
+        host = u.hostname;
+      }
       path = u.pathname;
     } catch {
       return undefined;
     }
   }
   path = path.replace(/^\/+/, '').replace(/\.git$/, '').replace(/\/+$/, '');
+  if (!path) {
+    return undefined;
+  }
 
   const hostname = host.split(':')[0];
   const override = overrides[host] ?? overrides[hostname];
   let kind: HostKind | undefined;
-  if (override === 'github' || override === 'gitlab' || override === 'gitea') {
-    kind = override;
+  let baseUrl = `${protocol}//${host}`;
+  if (typeof override === 'string') {
+    kind = kinds.includes(override) ? override : undefined;
+  } else if (override && kinds.includes(override.type)) {
+    kind = override.type;
+    if (override.url) {
+      baseUrl = override.url.replace(/\/+$/, '');
+    }
   } else if (hostname.includes('github')) {
     kind = 'github';
   } else if (hostname.includes('gitlab')) {
@@ -40,16 +62,23 @@ export function parseRemote(url: string, overrides: Record<string, string>): Rem
   } else if (hostname.includes('gitea') || hostname.includes('forgejo')) {
     kind = 'gitea';
   }
-  return kind && path ? { kind, host, path } : undefined;
+  if (!kind) {
+    return undefined;
+  }
+  try {
+    return { kind, baseUrl, host: new URL(baseUrl).host, path };
+  } catch {
+    return undefined;
+  }
 }
 
 export function commitUrl(r: Remote, sha: string): string {
-  const base = `https://${r.host}/${r.path}`;
+  const base = `${r.baseUrl}/${r.path}`;
   return r.kind === 'gitlab' ? `${base}/-/commit/${sha}` : `${base}/commit/${sha}`;
 }
 
 export function mergeRequestUrl(r: Remote, n: number): string {
-  const base = `https://${r.host}/${r.path}`;
+  const base = `${r.baseUrl}/${r.path}`;
   switch (r.kind) {
     case 'github':
       return `${base}/pull/${n}`;
@@ -86,7 +115,7 @@ export function parseMergeRequestNumber(kind: HostKind, message: string): number
 export async function fetchMergeRequestNumber(r: Remote, sha: string, token: string): Promise<number | undefined> {
   switch (r.kind) {
     case 'github': {
-      const api = r.host === 'github.com' ? 'https://api.github.com' : `https://${r.host}/api/v3`;
+      const api = r.host === 'github.com' ? 'https://api.github.com' : `${r.baseUrl}/api/v3`;
       const prs = await getJson<{ number: number; merged_at: string | null }[]>(
         `${api}/repos/${r.path}/commits/${sha}/pulls`,
         { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
@@ -95,14 +124,14 @@ export async function fetchMergeRequestNumber(r: Remote, sha: string, token: str
     }
     case 'gitlab': {
       const mrs = await getJson<{ iid: number; state: string }[]>(
-        `https://${r.host}/api/v4/projects/${encodeURIComponent(r.path)}/repository/commits/${sha}/merge_requests`,
+        `${r.baseUrl}/api/v4/projects/${encodeURIComponent(r.path)}/repository/commits/${sha}/merge_requests`,
         { 'PRIVATE-TOKEN': token },
       );
       return (mrs?.find((m) => m.state === 'merged') ?? mrs?.[0])?.iid;
     }
     case 'gitea': {
       const pr = await getJson<{ number: number }>(
-        `https://${r.host}/api/v1/repos/${r.path}/commits/${sha}/pull`,
+        `${r.baseUrl}/api/v1/repos/${r.path}/commits/${sha}/pull`,
         { Authorization: `token ${token}` },
       );
       return pr?.number;
@@ -111,7 +140,7 @@ export async function fetchMergeRequestNumber(r: Remote, sha: string, token: str
 }
 
 async function getJson<T>(url: string, headers: Record<string, string>): Promise<T | undefined> {
-  const res = await fetch(url, { headers });
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(10_000) });
   if (res.status === 404) {
     return undefined;
   }

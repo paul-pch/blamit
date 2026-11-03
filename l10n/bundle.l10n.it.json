@@ -1,0 +1,20 @@
+{
+  "You • Not committed yet": "Tu • Non ancora committato",
+  "just now": "proprio ora",
+  "Open commit": "Apri il commit",
+  "Open MR/PR {0}": "Apri la MR/PR {0}",
+  "Find MR/PR": "Cerca la MR/PR",
+  "Copy SHA": "Copia lo SHA",
+  "Blamit: no blame available for this line.": "Blamit: nessun blame disponibile per questa riga.",
+  "Blamit: this line is not committed yet.": "Blamit: questa riga non è ancora stata committata.",
+  "Blamit: remote not found or host not recognized (see the blamit.hosts setting).": "Blamit: remote non trovato o host non riconosciuto (vedi l'impostazione blamit.hosts).",
+  "Looking up the MR/PR…": "Ricerca della MR/PR…",
+  "Blamit: API call failed — {0}": "Blamit: chiamata API non riuscita — {0}",
+  "Open the commit instead": "Apri invece il commit",
+  "Blamit: no MR/PR found for this commit.": "Blamit: nessuna MR/PR trovata per questo commit.",
+  "SHA copied: {0}": "SHA copiato: {0}",
+  "Host (e.g. gitlab.com, github.com, git.example.com)": "Host (es. gitlab.com, github.com, git.example.com)",
+  "API token for {0} (leave empty to remove)": "Token API per {0} (lasciare vuoto per rimuoverlo)",
+  "Blamit: token saved for {0}.": "Blamit: token salvato per {0}.",
+  "Blamit: token removed for {0}.": "Blamit: token rimosso per {0}."
+}

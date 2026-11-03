@@ -1,0 +1,12 @@
+{
+  "displayName": "Blamit",
+  "description": "Current line blame, and open the commit or merge/pull request that introduced it in your browser (GitHub, GitLab, Gitea).",
+  "capabilities.untrusted": "Blamit runs git, which can execute code configured by the repository. It is disabled in untrusted workspaces.",
+  "command.openCommit": "Open Commit",
+  "command.openMergeRequest": "Open MR/PR",
+  "command.copySha": "Copy SHA",
+  "command.setToken": "Set API Token",
+  "config.enabled": "Show the author of the current line.",
+  "config.remote": "Git remote used to build URLs.",
+  "config.hosts": "Host type for self-hosted instances, keyed by the host of the remote URL. The value is either a type (`github`, `gitlab`, `gitea`) or `{ \"type\": ..., \"url\": \"https://...\" }` to also set the web URL (useful for SSH aliases).\n\nExample: `{ \"git.example.com\": \"gitea\", \"github-work\": { \"type\": \"github\", \"url\": \"https://github.com\" } }`"
+}

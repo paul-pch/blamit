@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="https://open-vsx.org/extension/paul-pch/blamit"><img src="https://img.shields.io/open-vsx/v/paul-pch/blamit?label=Open%20VSX&color=f05133" alt="Open VSX"></a>
+  <a href="https://github.com/paul-pch/blamit/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/paul-pch/blamit/ci.yml?branch=main&label=CI" alt="CI"></a>
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT">
   <img src="https://img.shields.io/badge/GitHub%20·%20GitLab%20·%20Gitea-supported-555" alt="GitHub, GitLab, Gitea">
 </p>

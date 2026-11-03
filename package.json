@@ -1,0 +1,95 @@
+{
+  "name": "simple-blame",
+  "displayName": "Simple Blame",
+  "description": "Blame de la ligne courante et ouverture du commit ou de la MR/PR dans le navigateur.",
+  "version": "0.1.0",
+  "publisher": "paul-pch",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "SCM Providers"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "simpleBlame.openCommit",
+        "title": "Ouvrir le commit",
+        "category": "Simple Blame"
+      },
+      {
+        "command": "simpleBlame.openMergeRequest",
+        "title": "Ouvrir la MR/PR",
+        "category": "Simple Blame"
+      },
+      {
+        "command": "simpleBlame.copySha",
+        "title": "Copier le SHA",
+        "category": "Simple Blame"
+      },
+      {
+        "command": "simpleBlame.setToken",
+        "title": "Définir un token API",
+        "category": "Simple Blame"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "simpleBlame.openCommit",
+          "when": "resourceScheme == file",
+          "group": "simpleBlame@1"
+        },
+        {
+          "command": "simpleBlame.openMergeRequest",
+          "when": "resourceScheme == file",
+          "group": "simpleBlame@2"
+        },
+        {
+          "command": "simpleBlame.copySha",
+          "when": "resourceScheme == file",
+          "group": "simpleBlame@3"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Simple Blame",
+      "properties": {
+        "simpleBlame.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Affiche l'auteur de la ligne courante."
+        },
+        "simpleBlame.remote": {
+          "type": "string",
+          "default": "origin",
+          "description": "Remote git utilisé pour construire les URLs."
+        },
+        "simpleBlame.hosts": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "string",
+            "enum": ["github", "gitlab", "gitea"]
+          },
+          "description": "Type d'hébergeur par hôte, pour les instances self-hosted. Ex : { \"git.maboite.fr\": \"gitea\" }"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  }
+}

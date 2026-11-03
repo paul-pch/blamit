@@ -1,22 +1,76 @@
-# Blamit
+<p align="center">
+  <img src="images/icon.png" alt="Blamit" width="128">
+</p>
 
-A deliberately minimal alternative to GitLens: see who last changed the current line, and open the commit or the merge/pull request that introduced it in your browser.
+<h1 align="center">Blamit</h1>
 
-No side panels, no graphs, no runtime dependencies.
+<p align="center">
+  <b>Who wrote this line, and in which MR?</b><br>
+  Git blame for the current line, one click away from the commit or the merge request.
+</p>
 
-## Features
+<p align="center">
+  <a href="https://open-vsx.org/extension/paul-pch/blamit"><img src="https://img.shields.io/open-vsx/v/paul-pch/blamit?label=Open%20VSX&color=f05133" alt="Open VSX"></a>
+  <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT">
+  <img src="https://img.shields.io/badge/GitHub%20·%20GitLab%20·%20Gitea-supported-555" alt="GitHub, GitLab, Gitea">
+</p>
 
-- **Current line blame**: `Author, 3 days ago • Commit summary` at the end of the line under the cursor. Unsaved edits are taken into account.
-- **Hover** over the annotation: full commit message, author, date, and links to open the commit or the MR/PR.
-- **Commands** (Command Palette and editor context menu), applied to the cursor line:
-  - `Blamit: Open Commit`
-  - `Blamit: Open MR/PR`
-  - `Blamit: Copy SHA`
-  - `Blamit: Set API Token`
+---
 
-## Supported hosts
+Blamit is what's left of GitLens once you remove everything but the blame. No side panels, no graphs, no account, no runtime dependencies.
 
-GitHub, GitLab and Gitea/Forgejo, including self-hosted instances. The host type is detected from the remote URL (a hostname containing `github`, `gitlab`, `gitea` or `forgejo`). For other hostnames, or for SSH aliases from `~/.ssh/config`, use the `blamit.hosts` setting:
+## What it does
+
+```
+const total = items.reduce(sum, 0);      Jane Doe, 3 days ago • Fix rounding in totals
+```
+
+- **Inline blame** on the line under the cursor: author, date, commit message.
+- **Hover** the annotation to see the full commit message and the links.
+- **Open the commit or the MR/PR** in your browser from the hover, the Command Palette or the right-click menu.
+- **Copy the SHA** in one click.
+
+Works on GitHub, GitLab and Gitea/Forgejo, cloud or self-hosted, and it handles unsaved edits.
+
+## Getting started
+
+Install it, open a file in a git repository, put the cursor on a line. That's it.
+
+Commands, all applied to the cursor line:
+
+| Command | |
+|---|---|
+| `Blamit: Open Commit` | Opens the commit page |
+| `Blamit: Open MR/PR` | Opens the merge/pull request that brought the line |
+| `Blamit: Copy SHA` | Copies the full commit SHA |
+| `Blamit: Set API Token` | Optional, see below |
+
+## How the MR/PR is found
+
+1. **Offline first.** Blamit reads the commit message (`Fix bug (#42)`, `See merge request group/project!12`), then the merge commit that brought it into your branch.
+2. **API as a fallback**, only if you set a token for that host. Useful for rebased or fast-forwarded commits.
+
+<details>
+<summary>Token scopes</summary>
+
+| Host | Scope |
+|---|---|
+| GitHub | Fine-grained: *Pull requests: read* (classic: `repo` for private repos) |
+| GitLab | `read_api` |
+| Gitea / Forgejo | `read:repository` |
+
+Tokens are stored in VS Code's secret storage and only ever sent to their own host.
+</details>
+
+## Settings
+
+| Setting | Default | |
+|---|---|---|
+| `blamit.enabled` | `true` | Show the inline blame |
+| `blamit.remote` | `"origin"` | Remote used to build links |
+| `blamit.hosts` | `{}` | Declare self-hosted instances and SSH aliases |
+
+Blamit recognizes hosts whose name contains `github`, `gitlab`, `gitea` or `forgejo`. For anything else:
 
 ```json
 "blamit.hosts": {
@@ -25,37 +79,16 @@ GitHub, GitLab and Gitea/Forgejo, including self-hosted instances. The host type
 }
 ```
 
-## Finding the MR/PR
+## Security
 
-1. **Locally, without network**: the commit message itself (squash merges: `Title (#123)`, `See merge request group/project!123`), then the message of the merge commit that brought the commit into the current branch.
-2. **Through the API**, only if a token is set for the host with `Blamit: Set API Token`. Tokens are kept in VS Code's secret storage and only sent to that host.
-
-Minimal token scopes:
-
-| Host | Scope |
-|---|---|
-| GitHub | Fine-grained token with *Pull requests: read* (classic: `repo` for private repositories) |
-| GitLab | `read_api` |
-| Gitea / Forgejo | `read:repository` |
-
-Without a token, commits merged by rebase or fast-forward with no reference in their message have no MR/PR to find: you are offered to open the commit instead.
-
-## Settings
-
-| Setting | Default | Description |
-|---|---|---|
-| `blamit.enabled` | `true` | Show the current line blame |
-| `blamit.remote` | `"origin"` | Remote used to build URLs (falls back to the first remote) |
-| `blamit.hosts` | `{}` | Host type (and optionally web URL) for self-hosted instances and SSH aliases |
-
-## Requirements and security
-
-- Git must be installed. Blamit uses the git executable found by VS Code's built-in Git extension.
-- Blamit is disabled in untrusted workspaces (Restricted Mode), because git can run code configured by a repository.
+- Uses the git executable resolved by VS Code's built-in Git extension.
+- Disabled in untrusted workspaces, since git can run code configured by a repository.
 - Logs: *Output* panel → *Blamit*.
+
+## Languages
+
+English, Français, Deutsch, Italiano, Español.
 
 ## License
 
-MIT
-
-The icon is the [Git logo](https://git-scm.com/downloads/logos) by Jason Long, licensed under [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).
+MIT. The icon is the [Git logo](https://git-scm.com/downloads/logos) by Jason Long, licensed under [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).

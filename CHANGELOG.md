@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0
+## 0.1.1
 
 - Current line blame (author, relative date, commit summary).
 - Hover with full commit message and links to the commit and MR/PR.

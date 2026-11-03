@@ -10,7 +10,7 @@ Extension VS Code minimaliste inspirée de GitLens : afficher l'auteur de la lig
 
 ### 1.1 Annotation de la ligne courante
 - Quand le curseur est sur une ligne, on affiche un texte grisé en fin de ligne :
-  `paul-pch, il y a 3 jours • Fix du parsing des dates`
+  `Paul Pch, il y a 3 jours • Fix du parsing des dates`
 - Une seule ligne annotée à la fois (celle du curseur principal).
 - Lignes non commitées : `Vous • Non commité`.
 - Fichier non suivi par git, hors dépôt ou sans commit : pas d'annotation.

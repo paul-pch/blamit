@@ -5,6 +5,10 @@
   "version": "0.1.0",
   "publisher": "paul-pch",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/paul-pch/blamit"
+  },
   "icon": "images/icon.png",
   "keywords": [
     "git",
@@ -134,6 +138,7 @@
   "scripts": {
     "compile": "tsc -p .",
     "watch": "tsc -watch -p .",
+    "test": "npm run compile && node --test test/*.test.js",
     "vscode:prepublish": "npm run compile",
     "package": "vsce package",
     "publish": "ovsx publish"

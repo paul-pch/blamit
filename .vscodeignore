@@ -6,3 +6,5 @@ SPEC.md
 package-lock.json
 **/*.map
 .gitignore
+test/**
+.github/**

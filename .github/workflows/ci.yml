@@ -15,6 +15,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Le tag correspond à la version de package.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
       - run: npm ci
       - run: npm test
       - run: npx vsce package -o blamit.vsix
@@ -23,7 +26,7 @@ jobs:
           name: blamit.vsix
           path: blamit.vsix
 
-  # Publie sur Open VSX quand on pousse un tag vX.Y.Z (le secret OVSX_PAT doit être défini).
+  # Publie sur Open VSX quand on pousse un tag vX.Y.Z (le secret OVSX_TOKEN doit être défini).
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
@@ -32,6 +35,6 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: blamit.vsix
-      - run: npx --yes ovsx publish -i blamit.vsix -p "$OVSX_PAT"
+      - run: npx --yes ovsx publish -i blamit.vsix -p "$OVSX_TOKEN"
         env:
-          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+          OVSX_TOKEN: ${{ secrets.OVSX_TOKEN }}

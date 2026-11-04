@@ -16,5 +16,8 @@
   "Host (e.g. gitlab.com, github.com, git.example.com)": "Host (p. ej. gitlab.com, github.com, git.example.com)",
   "API token for {0} (leave empty to remove)": "Token de API para {0} (dejar vacío para eliminarlo)",
   "Blamit: token saved for {0}.": "Blamit: token guardado para {0}.",
-  "Blamit: token removed for {0}.": "Blamit: token eliminado para {0}."
+  "Blamit: token removed for {0}.": "Blamit: token eliminado para {0}.",
+  "Blamit: this file is not in a git repository.": "Blamit: este archivo no está en un repositorio git.",
+  "Blamit: no history for this file.": "Blamit: no hay historial para este archivo.",
+  "Blamit: no older revision.": "Blamit: no hay ninguna revisión más antigua."
 }

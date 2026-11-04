@@ -2,7 +2,7 @@
 
 Extension VS Code minimaliste inspirée de GitLens : afficher l'auteur de la ligne courante et ouvrir dans le navigateur le commit ou la MR/PR qui a introduit la ligne.
 
-**Principe directeur : le plus simple possible.** Pas de vue latérale, pas d'historique, pas de graphe, pas de dépendance runtime.
+**Principe directeur : le plus simple possible.** Pas de vue latérale, pas de graphe, pas de dépendance runtime.
 
 ---
 
@@ -33,6 +33,21 @@ Dans la palette et dans le menu contextuel de l'éditeur (groupe `blamit`), elle
 | Blamit: Définir un token API | `blamit.setToken` (palette seulement) |
 
 Si aucune MR/PR n'est trouvée, un message d'information le dit et propose « Ouvrir le commit à la place ».
+
+### 1.4 Révisions d'un fichier
+Navigation pas à pas dans l'historique du fichier courant :
+
+| Commande | ID | Raccourci | Bouton (barre de titre de l'éditeur) |
+|---|---|---|---|
+| Blamit: Ouvrir la révision précédente | `blamit.previousRevision` | `Alt+,` | ← sur un fichier du dépôt ou une révision |
+| Blamit: Ouvrir la révision suivante | `blamit.nextRevision` | `Alt+.` | → sur une révision |
+
+- Les révisions sont les commits listés par `git log --follow --topo-order -- <fichier>` (renommages suivis).
+- Chaque révision s'ouvre en diff : le fichier au commit précédent de la liste à gauche, au commit à droite (vide à gauche pour le premier commit). Titre : `fichier (sha court) résumé`.
+- Depuis la copie de travail, « précédente » ouvre le dernier commit ; depuis le plus récent, « suivante » revient à la copie de travail.
+- Le contenu est servi par un `TextDocumentContentProvider` sur le schéma `blamit:` (`git show <sha>:<chemin>`), le chemin de l'URI garde l'extension pour la coloration.
+- La ligne du curseur est conservée d'une vue à l'autre.
+- L'annotation, le hover et les commandes de la section 1.3 fonctionnent aussi sur les deux côtés du diff (`git blame --porcelain <sha> -- <chemin>`).
 
 ---
 
@@ -128,4 +143,4 @@ src/
 ---
 
 ## 5. Hors périmètre
-Blame du fichier entier, historique de ligne ou de fichier, diff, vues latérales, CodeLens, statut des PR, Bitbucket ou Azure DevOps, multi-curseurs.
+Blame du fichier entier, historique de ligne, vue liste de l'historique, vues latérales, CodeLens, statut des PR, Bitbucket ou Azure DevOps, multi-curseurs.

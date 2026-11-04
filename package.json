@@ -2,7 +2,7 @@
   "name": "blamit",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "publisher": "paul-pch",
   "license": "MIT",
   "repository": {
@@ -61,27 +61,73 @@
         "command": "blamit.setToken",
         "title": "%command.setToken%",
         "category": "Blamit"
+      },
+      {
+        "command": "blamit.previousRevision",
+        "title": "%command.previousRevision%",
+        "category": "Blamit",
+        "icon": "$(arrow-left)"
+      },
+      {
+        "command": "blamit.nextRevision",
+        "title": "%command.nextRevision%",
+        "category": "Blamit",
+        "icon": "$(arrow-right)"
       }
     ],
     "menus": {
       "editor/context": [
         {
           "command": "blamit.openCommit",
-          "when": "resourceScheme == file",
+          "when": "resourceScheme == file || resourceScheme == blamit",
           "group": "blamit@1"
         },
         {
           "command": "blamit.openMergeRequest",
-          "when": "resourceScheme == file",
+          "when": "resourceScheme == file || resourceScheme == blamit",
           "group": "blamit@2"
         },
         {
           "command": "blamit.copySha",
-          "when": "resourceScheme == file",
+          "when": "resourceScheme == file || resourceScheme == blamit",
           "group": "blamit@3"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "blamit.previousRevision",
+          "when": "resourceScheme == file || resourceScheme == blamit",
+          "group": "navigation@1"
+        },
+        {
+          "command": "blamit.nextRevision",
+          "when": "resourceScheme == blamit",
+          "group": "navigation@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "blamit.previousRevision",
+          "when": "resourceScheme == file || resourceScheme == blamit"
+        },
+        {
+          "command": "blamit.nextRevision",
+          "when": "resourceScheme == blamit"
         }
       ]
     },
+    "keybindings": [
+      {
+        "command": "blamit.previousRevision",
+        "key": "alt+,",
+        "when": "editorTextFocus && (resourceScheme == file || resourceScheme == blamit)"
+      },
+      {
+        "command": "blamit.nextRevision",
+        "key": "alt+.",
+        "when": "editorTextFocus && resourceScheme == blamit"
+      }
+    ],
     "configuration": {
       "title": "Blamit",
       "properties": {

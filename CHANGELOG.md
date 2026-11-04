@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0
+
+- Browse a file's history: Open Previous / Next Revision, with editor title buttons and `Alt+,` / `Alt+.`. Inline blame works in those views too.
+
 ## 0.1.1
 
 - Current line blame (author, relative date, commit summary).

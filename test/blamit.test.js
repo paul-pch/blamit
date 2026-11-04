@@ -88,6 +88,30 @@ test('recherche locale de la PR', async () => {
   assert.strictEqual(await find(0), undefined, 'commit initial');
 });
 
+test('historique du fichier et contenu à une révision', async () => {
+  run('Fay', 'mv', 'f.txt', 'h.txt');
+  run('Fay', 'commit', '-qm', 'renommage');
+  try {
+    const history = await git.fileHistory(repo, 'h.txt');
+    assert.deepStrictEqual(
+      history.map((r) => [r.summary, r.path]),
+      [
+        ['renommage', 'h.txt'],
+        ['commit direct', 'f.txt'],
+        ['Ajout d (#7)', 'f.txt'],
+        ['ajout c', 'f.txt'],
+        ['init', 'f.txt'],
+      ],
+    );
+    assert.strictEqual(await git.showFile(repo, history[1].sha, history[1].path), 'a\nb\nc\nd\ne\n');
+    assert.strictEqual(await git.showFile(repo, history[4].sha, history[4].path), 'a\nb\n');
+    const old = await git.blameAt(repo, history[2].sha, history[2].path);
+    assert.deepStrictEqual(old.map((l) => l.author), ['Alice', 'Alice', 'Bob', 'Carol']);
+  } finally {
+    run('Fay', 'reset', '-q', '--hard', 'HEAD~');
+  }
+});
+
 test('parseRemote', () => {
   const R = (kind, baseUrl, host, p) => ({ kind, baseUrl, host, path: p });
   const P = hosts.parseRemote;

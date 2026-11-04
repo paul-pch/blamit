@@ -37,7 +37,15 @@ export function git(cwd: string, args: string[], input?: string, signal?: AbortS
 
 /** Blame du fichier, avec le contenu du buffer (éventuellement non sauvegardé). Index = numéro de ligne (0-based). */
 export async function blame(cwd: string, file: string, contents: string, signal?: AbortSignal): Promise<BlameLine[]> {
-  const out = await git(cwd, ['blame', '--porcelain', '--contents', '-', '--', file], contents, signal);
+  return parseBlame(await git(cwd, ['blame', '--porcelain', '--contents', '-', '--', file], contents, signal));
+}
+
+/** Blame du fichier tel qu'il était au commit `sha` (`file` relatif à `cwd`). */
+export async function blameAt(cwd: string, sha: string, file: string, signal?: AbortSignal): Promise<BlameLine[]> {
+  return parseBlame(await git(cwd, ['blame', '--porcelain', sha, '--', file], undefined, signal));
+}
+
+function parseBlame(out: string): BlameLine[] {
   const commits = new Map<string, BlameLine>();
   const lines: BlameLine[] = [];
   let current: BlameLine | undefined;
@@ -120,4 +128,38 @@ export async function findMergeCommit(cwd: string, sha: string): Promise<string 
   } catch {
     return merge;
   }
+}
+
+export async function repoRoot(cwd: string): Promise<string> {
+  return (await git(cwd, ['rev-parse', '--show-toplevel'])).trim();
+}
+
+export interface Revision {
+  sha: string;
+  summary: string;
+  /** Chemin du fichier dans ce commit, relatif à la racine du dépôt (suit les renommages). */
+  path: string;
+}
+
+/** Commits ayant modifié le fichier, du plus récent au plus ancien. `file` est relatif à `root`. */
+export async function fileHistory(root: string, file: string): Promise<Revision[]> {
+  const out = await git(root, ['log', '--follow', '--topo-order', '-z', '--format=%H%x1f%s', '--name-only', '--', file]);
+  const revisions: Revision[] = [];
+  for (const token of out.split('\0')) {
+    const text = token.replace(/^\n/, '');
+    const sep = text.indexOf('\x1f');
+    if (sep !== -1) {
+      // Un merge n'a pas de nom de fichier : on garde celui du commit plus récent.
+      const path = revisions[revisions.length - 1]?.path ?? file;
+      revisions.push({ sha: text.slice(0, sep), summary: text.slice(sep + 1), path });
+    } else if (text && revisions.length > 0) {
+      revisions[revisions.length - 1].path = text;
+    }
+  }
+  return revisions;
+}
+
+/** Contenu du fichier à un commit donné (`path` relatif à `root`). */
+export async function showFile(root: string, sha: string, path: string): Promise<string> {
+  return git(root, ['show', `${sha}:${path}`]);
 }

@@ -30,6 +30,7 @@ const total = items.reduce(sum, 0);      Jane Doe, 3 days ago • Fix rounding i
 - **Hover** the annotation to see the full commit message and the links.
 - **Open the commit or the MR/PR** in your browser from the hover, the Command Palette or the right-click menu.
 - **Copy the SHA** in one click.
+- **Step through a file's history**: each revision opens as a diff with the one before it.
 
 Works on GitHub, GitLab and Gitea/Forgejo, cloud or self-hosted, and it handles unsaved edits.
 
@@ -45,6 +46,13 @@ Commands, all applied to the cursor line:
 | `Blamit: Open MR/PR` | Opens the merge/pull request that brought the line |
 | `Blamit: Copy SHA` | Copies the full commit SHA |
 | `Blamit: Set API Token` | Optional, see below |
+
+Browsing a file's history, from the ← → buttons in the editor title bar:
+
+| Command | Shortcut | |
+|---|---|---|
+| `Blamit: Open Previous Revision` | `Alt+,` | Shows the change made by the previous commit to the file |
+| `Blamit: Open Next Revision` | `Alt+.` | Goes back towards the working copy |
 
 ## How the MR/PR is found
 

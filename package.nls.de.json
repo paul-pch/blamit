@@ -6,6 +6,8 @@
   "command.openMergeRequest": "MR/PR öffnen",
   "command.copySha": "SHA kopieren",
   "command.setToken": "API-Token festlegen",
+  "command.previousRevision": "Vorherige Revision öffnen",
+  "command.nextRevision": "Nächste Revision öffnen",
   "config.enabled": "Zeigt den Autor der aktuellen Zeile an.",
   "config.remote": "Git-Remote, das zum Erstellen der URLs verwendet wird.",
   "config.hosts": "Host-Typ für selbst gehostete Instanzen, nach Host der Remote-URL. Der Wert ist entweder ein Typ (`github`, `gitlab`, `gitea`) oder `{ \"type\": ..., \"url\": \"https://...\" }`, um zusätzlich die Web-URL anzugeben (nützlich für SSH-Aliase).\n\nBeispiel: `{ \"git.example.com\": \"gitea\", \"github-work\": { \"type\": \"github\", \"url\": \"https://github.com\" } }`"

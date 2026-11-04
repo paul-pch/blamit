@@ -1,6 +1,18 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { BlameLine, blame, commitMessage, findMergeCommit, remoteUrl, setGitPath } from './git';
+import {
+  BlameLine,
+  Revision,
+  blame,
+  blameAt as blameRevision,
+  commitMessage,
+  fileHistory,
+  findMergeCommit,
+  remoteUrl,
+  repoRoot,
+  setGitPath,
+  showFile,
+} from './git';
 import {
   HostOverride,
   Remote,
@@ -71,11 +83,14 @@ export async function activate(context: vscode.ExtensionContext) {
         scheduleUpdate(vscode.window.activeTextEditor);
       }
     }),
-    vscode.languages.registerHoverProvider({ scheme: 'file' }, { provideHover }),
+    vscode.languages.registerHoverProvider([{ scheme: 'file' }, { scheme: REVISION_SCHEME }], { provideHover }),
     vscode.commands.registerCommand('blamit.openCommit', openCommit),
     vscode.commands.registerCommand('blamit.openMergeRequest', openMergeRequest),
     vscode.commands.registerCommand('blamit.copySha', copySha),
     vscode.commands.registerCommand('blamit.setToken', setToken),
+    vscode.workspace.registerTextDocumentContentProvider(REVISION_SCHEME, { provideTextDocumentContent }),
+    vscode.commands.registerCommand('blamit.previousRevision', () => navigate(1)),
+    vscode.commands.registerCommand('blamit.nextRevision', () => navigate(-1)),
   );
 
   scheduleUpdate(vscode.window.activeTextEditor);
@@ -110,7 +125,7 @@ function isEnabled(): boolean {
 // --- Annotation ---------------------------------------------------------------
 
 function scheduleUpdate(editor: vscode.TextEditor | undefined) {
-  if (editor && editor.document.uri.scheme !== 'file') {
+  if (editor && !isBlamable(editor.document)) {
     return;
   }
   clearTimeout(timer);
@@ -134,7 +149,7 @@ async function updateDecoration(editor: vscode.TextEditor | undefined) {
   if (editor !== vscode.window.activeTextEditor || editor.selection.active.line !== line) {
     return;
   }
-  log.trace(`Line ${line + 1} of ${editor.document.uri.fsPath}: ${info ? info.sha : 'no blame'}`);
+  log.trace(`Line ${line + 1} of ${editor.document.uri.toString()}: ${info ? info.sha : 'no blame'}`);
   if (!info) {
     editor.setDecorations(decoration, []);
     return;
@@ -155,16 +170,24 @@ function invalidate(doc: vscode.TextDocument) {
 }
 
 async function blameAt(doc: vscode.TextDocument, line: number): Promise<BlameLine | undefined> {
-  if (doc.uri.scheme !== 'file') {
+  if (!isBlamable(doc)) {
     return undefined;
   }
   const key = doc.uri.toString();
   let entry = blameCache.get(key);
   if (!entry) {
-    const file = doc.uri.fsPath;
     const abort = new AbortController();
     const created: BlameEntry = { abort, failed: false, lines: Promise.resolve(undefined) };
-    created.lines = blame(path.dirname(file), path.basename(file), doc.getText(), abort.signal).catch(
+    let file: string;
+    if (doc.uri.scheme === REVISION_SCHEME) {
+      const { root, sha, path: rel } = JSON.parse(doc.uri.query) as RevisionQuery;
+      file = `${rel}@${sha}`;
+      created.lines = sha ? blameRevision(root, sha, rel, abort.signal) : Promise.resolve(undefined);
+    } else {
+      file = doc.uri.fsPath;
+      created.lines = blame(path.dirname(file), path.basename(file), doc.getText(), abort.signal);
+    }
+    created.lines = created.lines.catch(
       (err: Error) => {
         if (!abort.signal.aborted) {
           // Cas normal pour un fichier hors dépôt ou non suivi.
@@ -178,6 +201,17 @@ async function blameAt(doc: vscode.TextDocument, line: number): Promise<BlameLin
     blameCache.set(key, entry);
   }
   return (await entry.lines)?.[line];
+}
+
+function isBlamable(doc: vscode.TextDocument): boolean {
+  return doc.uri.scheme === 'file' || doc.uri.scheme === REVISION_SCHEME;
+}
+
+/** Dossier où lancer git pour ce document. */
+function gitDir(doc: vscode.TextDocument): string {
+  return doc.uri.scheme === REVISION_SCHEME
+    ? (JSON.parse(doc.uri.query) as RevisionQuery).root
+    : path.dirname(doc.uri.fsPath);
 }
 
 function relativeTime(time: number): string {
@@ -215,7 +249,7 @@ async function provideHover(doc: vscode.TextDocument, position: vscode.Position)
   if (!info?.committed) {
     return undefined;
   }
-  const cwd = path.dirname(doc.uri.fsPath);
+  const cwd = gitDir(doc);
   const [message, remote] = await Promise.all([cachedMessage(cwd, info.sha), getRemote(cwd)]);
 
   const md = new vscode.MarkdownString();
@@ -275,7 +309,7 @@ async function currentLine(): Promise<LineContext | undefined> {
     vscode.window.showInformationMessage(vscode.l10n.t('Blamit: this line is not committed yet.'));
     return undefined;
   }
-  const cwd = path.dirname(editor.document.uri.fsPath);
+  const cwd = gitDir(editor.document);
   return { cwd, info, remote: await getRemote(cwd) };
 }
 
@@ -381,9 +415,7 @@ function tokenKey(host: string): string {
 
 async function setToken() {
   const editor = vscode.window.activeTextEditor;
-  const remote = editor?.document.uri.scheme === 'file'
-    ? await getRemote(path.dirname(editor.document.uri.fsPath))
-    : undefined;
+  const remote = editor && isBlamable(editor.document) ? await getRemote(gitDir(editor.document)) : undefined;
   const host = await vscode.window.showInputBox({
     prompt: vscode.l10n.t('Host (e.g. gitlab.com, github.com, git.example.com)'),
     value: remote?.host ?? '',
@@ -412,4 +444,93 @@ async function setToken() {
       mergeRequestCache.delete(sha);
     }
   }
+}
+
+// --- Révisions ----------------------------------------------------------------
+
+const REVISION_SCHEME = 'blamit';
+
+/**
+ * Query des URIs `blamit:` : un fichier à un commit donné.
+ * La vue n°i est le diff du i-ème commit (0 = le plus récent) ayant modifié le fichier.
+ */
+interface RevisionQuery {
+  root: string;
+  /** Fichier de la copie de travail, relatif à `root`. */
+  file: string;
+  /** Vide pour un fichier inexistant (côté gauche du premier commit). */
+  sha: string;
+  path: string;
+  view: number;
+}
+
+function revisionUri(query: RevisionQuery): vscode.Uri {
+  // Le chemin garde l'extension du fichier, pour la coloration syntaxique.
+  return vscode.Uri.from({ scheme: REVISION_SCHEME, path: `/${query.path}`, query: JSON.stringify(query) });
+}
+
+async function provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
+  const { root, sha, path: file } = JSON.parse(uri.query) as RevisionQuery;
+  if (!sha) {
+    return '';
+  }
+  try {
+    return await showFile(root, sha, file);
+  } catch (err) {
+    log.error(err as Error);
+    return '';
+  }
+}
+
+/** `step` = 1 pour remonter dans l'historique, -1 pour revenir vers la copie de travail. */
+async function navigate(step: 1 | -1) {
+  const editor = vscode.window.activeTextEditor;
+  const uri = editor?.document.uri;
+  let root: string;
+  let file: string;
+  let view: number;
+  if (uri?.scheme === REVISION_SCHEME) {
+    ({ root, file, view } = JSON.parse(uri.query) as RevisionQuery);
+  } else if (uri?.scheme === 'file') {
+    try {
+      root = await repoRoot(path.dirname(uri.fsPath));
+    } catch {
+      vscode.window.showWarningMessage(vscode.l10n.t('Blamit: this file is not in a git repository.'));
+      return;
+    }
+    file = path.relative(root, uri.fsPath).split(path.sep).join('/');
+    view = -1;
+  } else {
+    return;
+  }
+
+  const target = view + step;
+  const line = editor?.selection.active.line ?? 0;
+  const selection = new vscode.Range(line, 0, line, 0);
+  if (target < 0) {
+    await vscode.window.showTextDocument(vscode.Uri.file(path.join(root, file)), { selection });
+    return;
+  }
+
+  let history: Revision[];
+  try {
+    history = await fileHistory(root, file);
+  } catch (err) {
+    log.error(err as Error);
+    history = [];
+  }
+  const revision = history[target];
+  if (!revision) {
+    vscode.window.showInformationMessage(
+      history.length === 0
+        ? vscode.l10n.t('Blamit: no history for this file.')
+        : vscode.l10n.t('Blamit: no older revision.'),
+    );
+    return;
+  }
+  const parent = history[target + 1];
+  const left = revisionUri({ root, file, sha: parent?.sha ?? '', path: parent?.path ?? revision.path, view: target });
+  const right = revisionUri({ root, file, sha: revision.sha, path: revision.path, view: target });
+  const title = `${path.posix.basename(revision.path)} (${revision.sha.slice(0, 8)}) ${revision.summary}`;
+  await vscode.commands.executeCommand('vscode.diff', left, right, title, { selection });
 }

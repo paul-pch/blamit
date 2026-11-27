@@ -19,5 +19,6 @@
   "Blamit: token removed for {0}.": "Blamit: token rimosso per {0}.",
   "Blamit: this file is not in a git repository.": "Blamit: questo file non è in un repository git.",
   "Blamit: no history for this file.": "Blamit: nessuna cronologia per questo file.",
-  "Blamit: no older revision.": "Blamit: nessuna revisione precedente."
+  "Blamit: no older revision.": "Blamit: nessuna revisione precedente.",
+  "File added in this commit": "File aggiunto in questo commit"
 }

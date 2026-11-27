@@ -2,12 +2,14 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import {
   BlameLine,
+  LineChange,
   Revision,
   blame,
   blameAt as blameRevision,
   commitMessage,
   fileHistory,
   findMergeCommit,
+  lineChange,
   remoteUrl,
   repoRoot,
   setGitPath,
@@ -33,6 +35,8 @@ interface BlameEntry {
 
 const blameCache = new Map<string, BlameEntry>();
 const messageCache = new Map<string, Promise<string>>();
+/** `sha:chemin:ligne` -> extrait du diff ayant introduit la ligne. */
+const changeCache = new Map<string, Promise<LineChange | undefined>>();
 /** SHA -> numéro de MR/PR, ou null si aucune trouvée. */
 const mergeRequestCache = new Map<string, number | null>();
 
@@ -250,13 +254,27 @@ async function provideHover(doc: vscode.TextDocument, position: vscode.Position)
     return undefined;
   }
   const cwd = gitDir(doc);
-  const [message, remote] = await Promise.all([cachedMessage(cwd, info.sha), getRemote(cwd)]);
+  const [message, remote, change] = await Promise.all([
+    cachedMessage(cwd, info.sha),
+    getRemote(cwd),
+    cachedChange(cwd, info),
+  ]);
 
   const md = new vscode.MarkdownString();
   md.isTrusted = { enabledCommands: ['blamit.openMergeRequest', 'blamit.copySha'] };
+  md.supportHtml = true;
+  md.supportThemeIcons = true;
   md.appendMarkdown(`**${escape(info.author)}** &lt;${escape(info.authorMail)}&gt; — `);
   md.appendMarkdown(`${new Date(info.authorTime).toLocaleString(vscode.env.language)} — \`${info.sha.slice(0, 8)}\`\n\n`);
   md.appendCodeblock(message, 'text');
+  if (change?.fileAdded) {
+    const label = escape(vscode.l10n.t('File added in this commit'));
+    md.appendMarkdown(
+      `<span style="color:var(--vscode-gitDecoration-addedResourceForeground);">$(diff-added) ${label}</span>\n\n`,
+    );
+  } else if (change) {
+    md.appendCodeblock(change.diff, 'diff');
+  }
 
   const links = [];
   if (remote) {
@@ -285,6 +303,19 @@ function cachedMessage(cwd: string, sha: string): Promise<string> {
     messageCache.set(sha, msg);
   }
   return msg;
+}
+
+function cachedChange(cwd: string, info: BlameLine): Promise<LineChange | undefined> {
+  const key = `${info.sha}:${info.path}:${info.origLine}`;
+  let change = changeCache.get(key);
+  if (!change) {
+    change = lineChange(cwd, info.sha, info.path, info.origLine).catch((err: Error) => {
+      log.debug(`git show failed for ${key}: ${err.message.trim()}`);
+      return undefined;
+    });
+    changeCache.set(key, change);
+  }
+  return change;
 }
 
 // --- Commandes ----------------------------------------------------------------

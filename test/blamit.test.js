@@ -62,6 +62,34 @@ test('blame : auteurs, métadonnées et ligne non commitée', async () => {
   assert.strictEqual(lines[5].committed, false);
 });
 
+test('blame : ligne et chemin d\'origine, extrait du diff', async () => {
+  const lines = await blameFile();
+  assert.deepStrictEqual(lines.slice(0, 5).map((l) => [l.origLine, l.path]), [
+    [1, 'f.txt'], [2, 'f.txt'], [3, 'f.txt'], [4, 'f.txt'], [5, 'f.txt'],
+  ]);
+  const d = lines[3];
+  assert.deepStrictEqual(await git.lineChange(repo, d.sha, d.path, d.origLine), { fileAdded: false, diff: ' a\n b\n c\n+d' });
+  const a = lines[0];
+  assert.deepStrictEqual(await git.lineChange(repo, a.sha, a.path, a.origLine), { fileAdded: true });
+});
+
+test('extractChange', () => {
+  const diff = [
+    'diff --git a/x b/x', '--- a/x', '+++ b/x',
+    '@@ -1,2 +1,2 @@', ' un', '-deux', '+DEUX',
+    '@@ -10,9 +10,9 @@', ' c1', ' c2', ' c3', ' c4', '-old', '+new', '\\ No newline at end of file', ' c5', ' c6', ' c7', ' c8', '',
+  ].join('\n');
+  const x = (...args) => git.extractChange(...args)?.diff;
+  assert.strictEqual(x(diff, 2), ' un\n-deux\n+DEUX');
+  assert.strictEqual(x(diff, 14), ' c2\n c3\n c4\n-old\n+new\n c5\n c6\n c7');
+  assert.strictEqual(x(diff, 14, 1), ' c4\n-old\n+new\n c5');
+  assert.strictEqual(x(diff, 13), undefined, 'ligne de contexte');
+  const big = '@@ -1 +1,100 @@\n-old\n' + Array.from({ length: 100 }, (_, i) => `+l${i + 1}`).join('\n');
+  assert.strictEqual(x(big, 50, 3, 5), '+l48\n+l49\n+l50\n+l51\n+l52');
+  assert.strictEqual(x(big, 1, 3, 3), '-old\n+l1\n+l2');
+  assert.deepStrictEqual(git.extractChange('@@ -0,0 +1,2 @@\n+a\n+b\n', 1), { fileAdded: true });
+});
+
 test('blame : annulation', async () => {
   const abort = new AbortController();
   const p = git.blame(repo, 'f.txt', 'x\n', abort.signal);

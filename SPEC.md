@@ -20,6 +20,7 @@ Extension VS Code minimaliste inspirée de GitLens : afficher l'auteur de la lig
 Au survol de l'annotation (fin de ligne uniquement, pour ne pas se mêler aux hovers du langage), une infobulle Markdown affiche :
 - l'auteur, l'email, la date absolue, le SHA court ;
 - le message complet du commit ;
+- un aperçu du changement qui a introduit la ligne : le bloc de lignes ajoutées/supprimées du diff du commit, avec 3 lignes de contexte, limité à 20 lignes centrées sur la ligne (`git show <sha> -- <chemin>`, à partir de la ligne et du chemin d'origine donnés par le blame). Si le commit a créé le fichier, seul un message vert « Fichier ajouté par ce commit » s'affiche ;
 - les liens **Ouvrir le commit** et **Ouvrir la MR/PR**. Le lien MR/PR n'apparaît que si elle a déjà été trouvée. Sinon, le lien « Chercher la MR/PR » lance la commande correspondante.
 
 ### 1.3 Commandes

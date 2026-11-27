@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0
+
+- Hover: preview of the diff that introduced the line, or a short notice when the commit added the whole file.
+
 ## 0.2.0
 
 - Browse a file's history: Open Previous / Next Revision, with editor title buttons and `Alt+,` / `Alt+.`. Inline blame works in those views too.

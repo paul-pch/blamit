@@ -27,7 +27,7 @@ const total = items.reduce(sum, 0);      Jane Doe, 3 days ago • Fix rounding i
 ```
 
 - **Inline blame** on the line under the cursor: author, date, commit message.
-- **Hover** the annotation to see the full commit message and the links.
+- **Hover** the annotation to see the full commit message, a preview of the change that introduced the line, and the links.
 - **Open the commit or the MR/PR** in your browser from the hover, the Command Palette or the right-click menu.
 - **Copy the SHA** in one click.
 - **Step through a file's history**: each revision opens as a diff with the one before it.

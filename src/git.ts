@@ -8,7 +8,13 @@ export interface BlameLine {
   authorTime: number;
   summary: string;
   committed: boolean;
+  /** Numéro de la ligne (1-based) dans le fichier tel qu'il était à ce commit. */
+  origLine: number;
+  /** Chemin du fichier à ce commit, relatif à la racine du dépôt. */
+  path: string;
 }
+
+type CommitInfo = Omit<BlameLine, 'origLine' | 'path'>;
 
 /**
  * Chemin de l'exécutable git. On reprend celui résolu par l'extension Git de VS Code :
@@ -46,23 +52,26 @@ export async function blameAt(cwd: string, sha: string, file: string, signal?: A
 }
 
 function parseBlame(out: string): BlameLine[] {
-  const commits = new Map<string, BlameLine>();
+  const commits = new Map<string, CommitInfo>();
   const lines: BlameLine[] = [];
-  let current: BlameLine | undefined;
+  let current: CommitInfo | undefined;
+  let origLine = 0;
   let finalLine = 0;
+  let file = '';
 
   for (const raw of out.split('\n')) {
     if (raw.startsWith('\t')) {
       // Ligne de contenu : clôt l'entrée en cours.
       if (current) {
-        lines[finalLine - 1] = current;
+        lines[finalLine - 1] = { ...current, origLine, path: file };
       }
       continue;
     }
-    const header = /^([0-9a-f]{40}) \d+ (\d+)/.exec(raw);
+    const header = /^([0-9a-f]{40}) (\d+) (\d+)/.exec(raw);
     if (header) {
       const sha = header[1];
-      finalLine = Number(header[2]);
+      origLine = Number(header[2]);
+      finalLine = Number(header[3]);
       current = commits.get(sha);
       if (!current) {
         current = { sha, author: '', authorMail: '', authorTime: 0, summary: '', committed: !/^0+$/.test(sha) };
@@ -88,6 +97,9 @@ function parseBlame(out: string): BlameLine[] {
         break;
       case 'summary':
         current.summary = value;
+        break;
+      case 'filename':
+        file = value;
         break;
     }
   }
@@ -162,4 +174,88 @@ export async function fileHistory(root: string, file: string): Promise<Revision[
 /** Contenu du fichier à un commit donné (`path` relatif à `root`). */
 export async function showFile(root: string, sha: string, path: string): Promise<string> {
   return git(root, ['show', `${sha}:${path}`]);
+}
+
+/** Changement ayant introduit une ligne : le fichier entier a été ajouté, ou un extrait du diff. */
+export type LineChange = { fileAdded: true } | { fileAdded: false; diff: string };
+
+/**
+ * Extrait du diff de `sha` autour de la ligne `line` (1-based) du fichier `path` (relatif à la racine du dépôt) :
+ * le bloc de modifications qui l'a introduite, avec quelques lignes de contexte.
+ */
+export async function lineChange(cwd: string, sha: string, path: string, line: number): Promise<LineChange | undefined> {
+  const diff = await git(cwd, ['show', '--format=', '--no-color', '--no-ext-diff', '-U3', sha, '--', `:(top)${path}`]);
+  return extractChange(diff, line);
+}
+
+/**
+ * Dans un diff unifié d'un seul fichier, renvoie le bloc de lignes ajoutées/supprimées contenant la ligne
+ * ajoutée n°`line` (numérotation du nouveau fichier), entouré d'au plus `context` lignes de contexte,
+ * et tronqué à `max` lignes centrées sur la ligne visée.
+ */
+export function extractChange(diff: string, line: number, context = 3, max = 20): LineChange | undefined {
+  // Fichier créé par ce commit : l'extrait ne serait qu'une suite de « + ».
+  if (/^@@ -0,0 \+/m.test(diff)) {
+    return { fileAdded: true };
+  }
+  let hunk: { text: string; newLine?: number }[] | undefined;
+  let next = 0;
+  for (const raw of diff.split('\n')) {
+    const header = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw);
+    if (header) {
+      if (hunk) {
+        const found = pick(hunk, line, context, max);
+        if (found) {
+          return { fileAdded: false, diff: found };
+        }
+      }
+      hunk = [];
+      next = Number(header[1]);
+      continue;
+    }
+    if (!hunk) {
+      continue;
+    }
+    const kind = raw[0];
+    if (kind === '+' || kind === ' ') {
+      hunk.push({ text: raw, newLine: next++ });
+    } else if (kind === '-') {
+      hunk.push({ text: raw });
+    } else if (kind !== '\\') {
+      // Fin du hunk (ligne vide finale ou fichier suivant).
+      const found = pick(hunk, line, context, max);
+      if (found) {
+        return { fileAdded: false, diff: found };
+      }
+      hunk = undefined;
+    }
+  }
+  const found = hunk && pick(hunk, line, context, max);
+  return found ? { fileAdded: false, diff: found } : undefined;
+}
+
+function pick(hunk: { text: string; newLine?: number }[], line: number, context: number, max: number) {
+  const target = hunk.findIndex((l) => l.newLine === line && l.text[0] === '+');
+  if (target === -1) {
+    return undefined;
+  }
+  const changed = (i: number) => hunk[i].text[0] !== ' ';
+  let start = target;
+  while (start > 0 && changed(start - 1)) {
+    start--;
+  }
+  let end = target + 1;
+  while (end < hunk.length && changed(end)) {
+    end++;
+  }
+  start = Math.max(0, start - context);
+  end = Math.min(hunk.length, end + context);
+  if (end - start > max) {
+    start = Math.min(Math.max(start, target - Math.floor(max / 2)), end - max);
+    end = start + max;
+  }
+  return hunk
+    .slice(start, end)
+    .map((l) => l.text)
+    .join('\n');
 }
